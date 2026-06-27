@@ -1,4 +1,3 @@
-# Triggering reload to pick up .env changes
 import os
 from pathlib import Path
 
@@ -50,23 +49,10 @@ def test_agent():
 async def debate(body: DebateTopic, request: Request) -> DebateTranscript:
     provider = request.headers.get("X-LLM-Provider")
     api_key = request.headers.get("X-LLM-Key")
-    
-    if provider and api_key:
-        os.environ["LLM_PROVIDER"] = provider
-        if provider == "openai":
-            os.environ["OPENAI_API_KEY"] = api_key
-        elif provider == "gemini":
-            os.environ["GEMINI_API_KEY"] = api_key
-        elif provider == "grok":
-            os.environ["GROK_API_KEY"] = api_key
-        elif provider == "groq":
-            os.environ["GROQ_API_KEY"] = api_key
-        elif provider == "openrouter":
-            os.environ["OPENROUTER_API_KEY"] = api_key
 
     from orchestrator.graph import run_debate
     try:
-        final_state = run_debate(body.topic, body.rounds)
+        final_state = run_debate(body.topic, body.rounds, provider=provider, api_key=api_key)
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     from agents.models import AgentMessage

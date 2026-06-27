@@ -4,7 +4,7 @@ from orchestrator.state import DebateState
 from agents.models import AgentMessage
 
 
-def _build_graph():
+def _build_graph(provider: str | None = None, api_key: str | None = None):
     from agents.base import build_llm
     from agents.proponent import ProponentAgent
     from agents.critic import CriticAgent
@@ -12,7 +12,7 @@ def _build_graph():
     from agents.fact_checker import FactCheckerAgent
     from agents.judge import JudgeAgent
 
-    llm = build_llm()
+    llm = build_llm(provider, api_key)
     proponent_agent = ProponentAgent(llm)
     critic_agent = CriticAgent(llm)
     analyst_agent = AnalystAgent(llm)
@@ -41,7 +41,7 @@ def _build_graph():
         messages = [AgentMessage(**m) for m in state.get("transcript", [])]
         response = fact_checker_agent.respond(messages, state["topic"])
         new_msg = {"role": fact_checker_agent.role, "content": response, "round": state["round"]}
-        # Increment round here so should_continue sees the updated value.
+        # round is incremented here so should_continue sees the updated value
         return {
             "transcript": state.get("transcript", []) + [new_msg],
             "round": state["round"] + 1,
@@ -89,13 +89,13 @@ def _build_graph():
     return workflow.compile()
 
 
-_graph = None
-
-
-def run_debate(topic: str, rounds: int = 3) -> DebateState:
-    global _graph
-    if _graph is None:
-        _graph = _build_graph()
+def run_debate(
+    topic: str,
+    rounds: int = 3,
+    provider: str | None = None,
+    api_key: str | None = None,
+) -> DebateState:
+    graph = _build_graph(provider, api_key)
     initial_state = DebateState(
         topic=topic,
         rounds=rounds,
@@ -106,4 +106,4 @@ def run_debate(topic: str, rounds: int = 3) -> DebateState:
         verdict="",
         status="debating",
     )
-    return _graph.invoke(initial_state)
+    return graph.invoke(initial_state)

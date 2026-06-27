@@ -1,0 +1,9 @@
+backend/
+docs/
+proposal/
+diagrams/
+workflow_architecture/
+*.docx
+*.png
+automate_scoring.py
+generate_chart.py

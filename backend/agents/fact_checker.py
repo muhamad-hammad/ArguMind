@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from .base import BaseAgent
-from .models import AgentMessage
 
 _SYSTEM_PROMPT = """\
 You are the Fact-Checker in a structured debate.
@@ -19,30 +18,3 @@ You will receive the full debate transcript so far. Respond only as the Fact-Che
 class FactCheckerAgent(BaseAgent):
     role = "fact_checker"
     system_prompt = _SYSTEM_PROMPT
-
-    def audit(self, messages: list[AgentMessage], topic: str) -> str:
-        """Alias for respond() for the Fact-checker agent."""
-        return self.respond(messages, topic)
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    from .base import build_llm
-
-    llm = build_llm()
-    agent = FactCheckerAgent(llm)
-
-    # Smoke test
-    messages = [
-        AgentMessage(
-            role="proponent",
-            content="AI should replace human judges because studies show human judges are 65% more likely to grant parole after lunch, proving they are highly biased by hunger.",
-            round=1,
-        )
-    ]
-
-    output = agent.audit(messages, "AI should replace human judges in courts")
-    print(output)

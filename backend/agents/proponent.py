@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from langchain_core.messages import SystemMessage, HumanMessage
-
 from .base import BaseAgent
 
 _SYSTEM_PROMPT = """\
@@ -21,30 +19,3 @@ You will receive the full debate transcript so far. Respond only as the Proponen
 class ProponentAgent(BaseAgent):
     role = "proponent"
     system_prompt = _SYSTEM_PROMPT
-
-    def opening_statement(self, topic: str) -> str:
-        chat = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=f"Make the strongest possible opening argument FOR: {topic}"),
-        ]
-        try:
-            result = self.llm.invoke(chat)
-            return result.content
-        except Exception as exc:
-            return (
-                f"[{self.role} fallback] Could not reach the configured LLM provider "
-                f"({type(exc).__name__}). Continuing with a local placeholder opening "
-                f"for topic '{topic}'."
-            )
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    from langchain_openai import ChatOpenAI
-
-    llm = ChatOpenAI(model="gpt-4o-mini")
-    agent = ProponentAgent(llm)
-    output = agent.opening_statement("AI should replace human judges in courts")
-    print(output)

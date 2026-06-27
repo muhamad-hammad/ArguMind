@@ -1,92 +1,82 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
-from agents.models import AgentMessage
+import main
+
+client = TestClient(main.app)
 
 
-def _mock_graph(topic: str = "test", rounds: int = 1) -> MagicMock:
-    messages = [
-        AgentMessage(role="proponent", content="Opening", round=0),
-        AgentMessage(role="critic", content="Counter", round=1),
-        AgentMessage(role="proponent", content="Rebuttal", round=1),
-        AgentMessage(role="analyst", content="Analysis", round=1),
-        AgentMessage(role="fact_checker", content="Facts", round=1),
-    ]
-    graph = MagicMock()
-    graph.invoke.return_value = {
+def _fake_state(topic: str = "AI", rounds: int = 1) -> dict:
+    return {
         "topic": topic,
         "rounds": rounds,
-        "messages": messages,
-        "current_round": 1,
+        "round": rounds + 1,
+        "transcript": [
+            {"role": "proponent", "content": "p", "round": 1},
+            {"role": "critic", "content": "c", "round": 1},
+            {"role": "analyst", "content": "a", "round": 1},
+            {"role": "fact_checker", "content": "f", "round": 1},
+        ],
+        "votes": {"accuracy": 8, "balance": 7, "depth": 6, "reasoning_quality": 9},
+        "winner": "proponent",
+        "verdict": "strong case",
+        "status": "done",
     }
-    return graph
 
 
-@pytest.fixture()
-def client():
-    import main
-    main._debate_graph = None  # reset cache between tests
-    return TestClient(main.app)
-
-
-def test_health(client):
+def test_health():
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
 
-@patch("main._get_debate_graph")
-def test_debate_returns_200_with_transcript(mock_get, client):
-    mock_get.return_value = _mock_graph()
+@patch("orchestrator.graph.run_debate")
+def test_debate_returns_transcript_and_judgment(mock_run):
+    mock_run.return_value = _fake_state("AI in courts")
     resp = client.post("/debate", json={"topic": "AI in courts", "rounds": 1})
     assert resp.status_code == 200
     data = resp.json()
     assert data["topic"] == "AI in courts"
-    assert len(data["messages"]) == 5
+    assert [m["role"] for m in data["messages"]] == [
+        "proponent",
+        "critic",
+        "analyst",
+        "fact_checker",
+    ]
+    assert data["judgment"]["winner"] == "proponent"
 
 
-@patch("main._get_debate_graph")
-def test_debate_all_four_roles_present(mock_get, client):
-    mock_get.return_value = _mock_graph()
-    resp = client.post("/debate", json={"topic": "Climate change", "rounds": 1})
-    roles = {m["role"] for m in resp.json()["messages"]}
-    assert {"proponent", "critic", "analyst", "fact_checker"}.issubset(roles)
-
-
-@patch("main._get_debate_graph")
-def test_debate_default_rounds_is_3(mock_get, client):
-    mock_get.return_value = _mock_graph()
+@patch("orchestrator.graph.run_debate")
+def test_debate_defaults_to_three_rounds(mock_run):
+    mock_run.return_value = _fake_state()
     client.post("/debate", json={"topic": "AI"})
-    call_state = mock_get.return_value.invoke.call_args[0][0]
-    assert call_state["rounds"] == 3
+    args, _ = mock_run.call_args
+    assert args[1] == 3
 
 
-def test_debate_missing_topic_returns_422(client):
-    resp = client.post("/debate", json={"rounds": 1})
-    assert resp.status_code == 422
+@patch("orchestrator.graph.run_debate")
+def test_debate_forwards_provider_and_key_headers(mock_run):
+    mock_run.return_value = _fake_state()
+    client.post(
+        "/debate",
+        json={"topic": "AI", "rounds": 1},
+        headers={"X-LLM-Provider": "groq", "X-LLM-Key": "secret"},
+    )
+    _, kwargs = mock_run.call_args
+    assert kwargs["provider"] == "groq"
+    assert kwargs["api_key"] == "secret"
 
 
-def test_debate_missing_body_returns_422(client):
-    resp = client.post("/debate")
-    assert resp.status_code == 422
+def test_debate_missing_topic_returns_422():
+    assert client.post("/debate", json={"rounds": 1}).status_code == 422
 
 
-@patch("main._get_debate_graph")
-def test_debate_llm_error_returns_502(mock_get, client):
-    graph = MagicMock()
-    graph.invoke.side_effect = RuntimeError("LLM unavailable")
-    mock_get.return_value = graph
+@patch("orchestrator.graph.run_debate")
+def test_debate_provider_error_returns_502(mock_run):
+    mock_run.side_effect = RuntimeError("AuthenticationError: bad key")
     resp = client.post("/debate", json={"topic": "AI", "rounds": 1})
     assert resp.status_code == 502
-    assert "LLM unavailable" in resp.json()["detail"]
-
-
-@patch("main._get_debate_graph")
-def test_debate_judgment_field_is_null_by_default(mock_get, client):
-    mock_get.return_value = _mock_graph()
-    resp = client.post("/debate", json={"topic": "AI", "rounds": 1})
-    assert resp.json()["judgment"] is None
+    assert "AuthenticationError" in resp.json()["detail"]

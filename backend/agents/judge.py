@@ -31,12 +31,6 @@ class JudgeAgent(BaseAgent):
     system_prompt = _SYSTEM_PROMPT
 
     def judge(self, messages: list[AgentMessage], topic: str) -> dict:
-        """
-        Run the judge over the full transcript and return a parsed dict.
-
-        Falls back to a default structure if the LLM returns malformed JSON
-        or the provider is unreachable.
-        """
         transcript_lines = "\n".join(
             f"[Round {m.round}] {m.role.upper()}: {m.content}" for m in messages
         )
@@ -52,14 +46,14 @@ class JudgeAgent(BaseAgent):
             ),
         ]
 
+        raw = self.llm.invoke(chat).content.strip()
+        # models often wrap JSON in a ```json ... ``` fence
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+
         try:
-            result = self.llm.invoke(chat)
-            raw = result.content.strip()
-            # Strip markdown code fences if the model wraps output in ```json ... ```
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
             return json.loads(raw.strip())
         except json.JSONDecodeError as exc:
             return {
@@ -70,67 +64,3 @@ class JudgeAgent(BaseAgent):
                 "winner": "unknown",
                 "verdict": f"[Judge fallback] Could not parse LLM response as JSON: {exc}",
             }
-        except Exception as exc:
-            return {
-                "accuracy": 0,
-                "balance": 0,
-                "depth": 0,
-                "reasoning_quality": 0,
-                "winner": "unknown",
-                "verdict": (
-                    f"[Judge fallback] Could not reach the configured LLM provider "
-                    f"({type(exc).__name__}). No judgment available."
-                ),
-            }
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-
-    load_dotenv()
-
-    from .base import build_llm
-
-    llm = build_llm()
-    agent = JudgeAgent(llm)
-
-    sample_messages = [
-        AgentMessage(
-            role="proponent",
-            content=(
-                "AI should replace human judges because algorithms do not suffer from fatigue "
-                "or personal biases, ensuring consistent sentencing across all cases."
-            ),
-            round=1,
-        ),
-        AgentMessage(
-            role="critic",
-            content=(
-                "The Proponent claims algorithms avoid personal biases, yet ignores extensive "
-                "evidence that AI models inherit and amplify the systemic biases baked into "
-                "their training data, making them at least as biased as humans."
-            ),
-            round=1,
-        ),
-        AgentMessage(
-            role="proponent",
-            content=(
-                "Bias in training data is a solvable engineering problem; human bias is an "
-                "inherent cognitive one. We can audit and retrain models; we cannot rewire "
-                "the human brain."
-            ),
-            round=2,
-        ),
-        AgentMessage(
-            role="critic",
-            content=(
-                "Calling bias 'a solvable engineering problem' is an unsupported assertion. "
-                "There is no peer-reviewed consensus that algorithmic bias in high-stakes legal "
-                "decisions can be fully eliminated — only managed, often poorly."
-            ),
-            round=2,
-        ),
-    ]
-
-    result = agent.judge(sample_messages, "AI should replace human judges in courts")
-    print(json.dumps(result, indent=2))

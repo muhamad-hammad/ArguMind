@@ -38,7 +38,7 @@ export default function Home() {
       {showLLMConfig && <LLMConfigModal onClose={() => setShowLLMConfig(false)} />}
       {page === 'landing' && <LandingPage onStartDebate={startDebate} />}
       {page === 'debate' && debateParams && (
-        <DebateView topic={debateParams.topic} rounds={debateParams.rounds} onBack={backToLanding} />
+        <DebateView topic={debateParams.topic} rounds={debateParams.rounds} onBack={backToLanding} onOpenConfig={() => setShowLLMConfig(true)} />
       )}
       <Footer />
     </div>

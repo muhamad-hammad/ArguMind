@@ -79,4 +79,5 @@ def test_debate_provider_error_returns_502(mock_run):
     mock_run.side_effect = RuntimeError("AuthenticationError: bad key")
     resp = client.post("/debate", json={"topic": "AI", "rounds": 1})
     assert resp.status_code == 502
-    assert "AuthenticationError" in resp.json()["detail"]
+    # Error details are intentionally not echoed to clients (information leakage).
+    assert resp.json()["detail"] == "Debate execution failed."
